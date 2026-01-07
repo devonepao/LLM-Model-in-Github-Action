@@ -2,7 +2,7 @@
 
 ![GitHub Actions](https://img.shields.io/badge/github%20actions-%232671E5.svg?style=for-the-badge&logo=githubactions&logoColor=white)
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
-![License](https://img.shields.io/github/license/harshityadav95/LLM-Model-in-Github-Action?style=for-the-badge)
+![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)
 
 A powerful, efficient GitHub Action to run **Google's Gemma 3 270M** model directly in your CI/CD pipelines. Optimized for standard GitHub-hosted runners using `llama.cpp` and `uv` for lightning-fast inference.
 
