@@ -168,14 +168,16 @@ class PDFReportGenerator:
     
     def add_text_section(self, heading: str, content: str):
         """Add a text section with heading."""
+        import html
+        
         self.story.append(Paragraph(heading, self.styles['StepHeader']))
         
         # Split long content into paragraphs
         paragraphs = content.split('\n\n')
         for para in paragraphs:
             if para.strip():
-                # Escape special characters for reportlab
-                para_escaped = para.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                # Escape special characters for reportlab using html.escape
+                para_escaped = html.escape(para, quote=True)
                 self.story.append(Paragraph(para_escaped, self.styles['Normal']))
                 self.story.append(Spacer(1, 0.1 * inch))
     

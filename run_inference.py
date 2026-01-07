@@ -157,15 +157,21 @@ def run_inference_transformers(model_id, query, hf_token=None):
 class GemmaLangChainLLM(LLM):
     """Custom LangChain LLM wrapper for Gemma model."""
     
+    # Model configuration constants
+    MAX_INPUT_TOKENS = 6000  # Leave room for output within 32K context
+    MAX_OUTPUT_TOKENS = 512
+    
     model_id: str
     tokenizer: Any = None
     model: Any = None
     hf_token: Optional[str] = None
     
-    def __init__(self, model_id: str, hf_token: Optional[str] = None):
+    def __init__(self, model_id: str, hf_token: Optional[str] = None, max_input_tokens: int = None):
         super().__init__()
         self.model_id = model_id
         self.hf_token = hf_token or os.getenv("HF_TOKEN")
+        if max_input_tokens is not None:
+            self.MAX_INPUT_TOKENS = max_input_tokens
         self._load_model()
     
     def _load_model(self):
@@ -192,14 +198,13 @@ class GemmaLangChainLLM(LLM):
         inputs = self.tokenizer(prompt, return_tensors="pt").to("cpu")
         
         # Limit input to avoid context overflow
-        max_input_tokens = 6000  # Leave room for output
-        if inputs.input_ids.shape[1] > max_input_tokens:
-            inputs.input_ids = inputs.input_ids[:, -max_input_tokens:]
-            inputs.attention_mask = inputs.attention_mask[:, -max_input_tokens:]
+        if inputs.input_ids.shape[1] > self.MAX_INPUT_TOKENS:
+            inputs.input_ids = inputs.input_ids[:, -self.MAX_INPUT_TOKENS:]
+            inputs.attention_mask = inputs.attention_mask[:, -self.MAX_INPUT_TOKENS:]
         
         outputs = self.model.generate(
             **inputs,
-            max_new_tokens=512,
+            max_new_tokens=self.MAX_OUTPUT_TOKENS,
             do_sample=True,
             temperature=0.7,
             top_p=0.95,

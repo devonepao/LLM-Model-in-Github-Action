@@ -15,8 +15,13 @@ from io import BytesIO
 class WebNavigator:
     """Handles web navigation and automation using Playwright."""
     
-    def __init__(self, headless: bool = True):
+    # Configuration constants
+    DEFAULT_TIMEOUT_MS = 30000
+    DEFAULT_NETWORK_IDLE_TIMEOUT_MS = 10000
+    
+    def __init__(self, headless: bool = True, timeout_ms: int = None):
         self.headless = headless
+        self.timeout_ms = timeout_ms or self.DEFAULT_TIMEOUT_MS
         self.browser: Optional[Browser] = None
         self.page: Optional[Page] = None
         self.playwright = None
@@ -41,8 +46,8 @@ class WebNavigator:
         """Navigate to a URL and record the step."""
         print(f"Navigating to: {url}")
         try:
-            self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            self.page.wait_for_load_state("networkidle", timeout=10000)
+            self.page.goto(url, wait_until="domcontentloaded", timeout=self.timeout_ms)
+            self.page.wait_for_load_state("networkidle", timeout=self.DEFAULT_NETWORK_IDLE_TIMEOUT_MS)
             
             step = {
                 "action": "navigate",
@@ -306,7 +311,28 @@ def parse_navigation_prompt(prompt: str) -> Tuple[bool, Optional[Dict]]:
 def chunk_text(text: str, max_chars: int = 8000) -> List[str]:
     """
     Split text into chunks that fit within the context window.
-    Leaves room for prompt and response tokens.
+    
+    This function implements a hierarchical chunking strategy:
+    1. First tries to split by paragraphs (\\n\\n)
+    2. If paragraphs are too long, splits by sentences (. )
+    3. If sentences are too long, splits by words (spaces)
+    
+    Args:
+        text: The text to chunk
+        max_chars: Maximum characters per chunk (default 8000).
+                  This is sized to fit within Gemma's 32K token context window,
+                  accounting for ~4 chars per token and leaving room for prompts.
+    
+    Returns:
+        List of text chunks, each <= max_chars in length
+    
+    Edge cases handled:
+    - Text shorter than max_chars: returned as-is
+    - Single very long paragraph: split recursively by sentences then words
+    - Empty text or whitespace: returns list with single empty/whitespace chunk
+    
+    Note: The relationship between chars and tokens is approximate (~4:1 ratio).
+    Actual token count may vary based on the tokenizer.
     """
     # If text is short enough, return as-is
     if len(text) <= max_chars:
