@@ -1,0 +1,43 @@
+name: Run Gemma 3 270M
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'Select Model'
+        required: true
+        default: 'gemma-3-270m'
+        type: choice
+        options:
+        - gemma-3-270m
+        - gemma-3-270m-instruct
+      query:
+        description: 'Enter your query'
+        required: true
+        default: 'Explain why the sky is blue.'
+        type: string
+
+jobs:
+  inference:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Gemma Action
+        uses: ./ # Uses the action in the current root
+        with:
+          model: ${{ inputs.model }}
+          query: ${{ inputs.query }}
+          # hf_token: ${{ secrets.HF_TOKEN }} # Uncomment if needed for gated models
+
+      - name: Display Output
+        run: |
+          echo "Model Response:"
+          cat response.txt
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-response
+          path: response.txt
