@@ -18,11 +18,15 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v5
       with:
-        python-version: '3.10'
-        cache: 'pip'
+        enable-cache: true
+        cache-dependency-glob: "requirements.txt"
+
+    - name: Set up Python
+      shell: bash
+      run: uv python install 3.10
 
     - name: Set HF Home
       shell: bash
@@ -37,18 +41,13 @@ runs:
         restore-keys: |
           gemma-3-270m-weights-
 
-    - name: Install Dependencies
-      shell: bash
-      run: |
-        pip install -r ${{ github.action_path }}/requirements.txt
-
-    - name: Run Inference
+    - name: Run Inference (with uv)
       id: inference
       shell: bash
       env:
         HF_TOKEN: ${{ inputs.hf_token }}
       run: |
-        python ${{ github.action_path }}/run_inference.py \
+        uv run --with-requirements requirements.txt ${{ github.action_path }}/run_inference.py \
           --model "${{ inputs.model }}" \
           --query "${{ inputs.query }}" \
-          --hf_token "${{ inputs.hf_token }}"
+          --hf_token "${{ env.HF_TOKEN }}"
