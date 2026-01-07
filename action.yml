@@ -46,6 +46,12 @@ runs:
       shell: bash
       run: uv tool install huggingface_hub
 
+    - name: Install Playwright Browsers
+      shell: bash
+      run: |
+        uv run --with-requirements requirements.txt python -m playwright install chromium
+        uv run --with-requirements requirements.txt python -m playwright install-deps chromium
+
     - name: Download Model (CLI)
       if: inputs.model == 'gemma-3-270m-it' || inputs.model == 'gemma-3-270m-instruct'
       shell: bash

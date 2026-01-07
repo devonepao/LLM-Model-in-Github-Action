@@ -12,6 +12,27 @@ try:
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
 
+# Import web navigation and PDF generation modules
+try:
+    from web_navigator import WebNavigator, parse_navigation_prompt, chunk_text
+    from pdf_generator import create_navigation_report
+    WEB_NAVIGATION_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Web navigation not available: {e}")
+    WEB_NAVIGATION_AVAILABLE = False
+
+# LangChain imports
+try:
+    from langchain.llms.base import LLM
+    from langchain.chains.summarize import load_summarize_chain
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    from langchain.docstore.document import Document
+    from typing import Optional, List, Any
+    LANGCHAIN_AVAILABLE = True
+except ImportError:
+    print("Warning: LangChain not available")
+    LANGCHAIN_AVAILABLE = False
+
 # Model Mapping
 MODEL_MAPPINGS = {
     "gemma-3-270m": {
@@ -132,6 +153,196 @@ def run_inference_transformers(model_id, query, hf_token=None):
         print(f"Transformers inference failed: {e}")
         sys.exit(1)
 
+
+class GemmaLangChainLLM(LLM):
+    """Custom LangChain LLM wrapper for Gemma model."""
+    
+    # Model configuration constants
+    MAX_INPUT_TOKENS = 6000  # Leave room for output within 32K context
+    MAX_OUTPUT_TOKENS = 512
+    
+    model_id: str
+    tokenizer: Any = None
+    model: Any = None
+    hf_token: Optional[str] = None
+    
+    def __init__(self, model_id: str, hf_token: Optional[str] = None, max_input_tokens: int = None):
+        super().__init__()
+        self.model_id = model_id
+        self.hf_token = hf_token or os.getenv("HF_TOKEN")
+        if max_input_tokens is not None:
+            self.MAX_INPUT_TOKENS = max_input_tokens
+        self._load_model()
+    
+    def _load_model(self):
+        """Load the model and tokenizer."""
+        if not TRANSFORMERS_AVAILABLE:
+            raise ImportError("Transformers library not available")
+        
+        print(f"Loading model for LangChain: {self.model_id}...")
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, token=self.hf_token)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            token=self.hf_token,
+            torch_dtype=torch.float32,
+            use_safetensors=True
+        )
+        self.model.to("cpu")
+    
+    @property
+    def _llm_type(self) -> str:
+        return "gemma"
+    
+    def _call(self, prompt: str, stop: Optional[List[str]] = None) -> str:
+        """Run inference on the prompt."""
+        inputs = self.tokenizer(prompt, return_tensors="pt").to("cpu")
+        
+        # Limit input to avoid context overflow
+        if inputs.input_ids.shape[1] > self.MAX_INPUT_TOKENS:
+            inputs.input_ids = inputs.input_ids[:, -self.MAX_INPUT_TOKENS:]
+            inputs.attention_mask = inputs.attention_mask[:, -self.MAX_INPUT_TOKENS:]
+        
+        outputs = self.model.generate(
+            **inputs,
+            max_new_tokens=self.MAX_OUTPUT_TOKENS,
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.95,
+            top_k=64,
+        )
+        
+        response = self.tokenizer.decode(
+            outputs[0][inputs.input_ids.shape[1]:],
+            skip_special_tokens=True
+        )
+        return response.strip()
+
+
+def summarize_with_langchain(text: str, model_id: str, hf_token: Optional[str] = None) -> str:
+    """Summarize text using LangChain and Gemma model."""
+    if not LANGCHAIN_AVAILABLE:
+        print("Warning: LangChain not available, using simple truncation")
+        return text[:2000] + "..." if len(text) > 2000 else text
+    
+    try:
+        # Create LLM wrapper
+        llm = GemmaLangChainLLM(model_id=model_id, hf_token=hf_token)
+        
+        # Split text into manageable chunks
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=4000,
+            chunk_overlap=200,
+            length_function=len
+        )
+        
+        # Create documents
+        texts = text_splitter.split_text(text)
+        docs = [Document(page_content=t) for t in texts]
+        
+        print(f"Summarizing {len(docs)} chunks of text...")
+        
+        # Use map_reduce chain for long documents
+        chain = load_summarize_chain(llm, chain_type="map_reduce")
+        summary = chain.run(docs)
+        
+        return summary
+        
+    except Exception as e:
+        print(f"LangChain summarization failed: {e}")
+        # Fallback to simple truncation
+        return text[:2000] + "..." if len(text) > 2000 else text
+
+
+def handle_web_navigation(query: str, model_key: str, hf_token: Optional[str] = None) -> str:
+    """Handle web navigation tasks with Playwright and summarization."""
+    if not WEB_NAVIGATION_AVAILABLE:
+        print("Error: Web navigation dependencies not available")
+        return "Error: Web navigation not available. Please install playwright and related dependencies."
+    
+    # Parse the navigation prompt
+    is_nav, task_details = parse_navigation_prompt(query)
+    
+    if not is_nav or not task_details.get("urls"):
+        return "Error: Could not parse navigation task. Please include a URL to navigate to."
+    
+    print("Starting web navigation task...")
+    print(f"Task details: {task_details}")
+    
+    # Get model config
+    if model_key not in MODEL_MAPPINGS:
+        model_key = "gemma-3-270m-it"  # Default to instruct model
+    
+    model_config = MODEL_MAPPINGS[model_key]
+    model_id = model_config.get("repo_id") if model_config.get("backend") == "transformers" else None
+    
+    # Perform web navigation
+    with WebNavigator(headless=True) as navigator:
+        # Navigate to the URL
+        url = task_details["urls"][0]
+        navigator.navigate(url)
+        
+        # Execute actions
+        content_to_summarize = ""
+        for action in task_details.get("actions", []):
+            if action["type"] == "open_first_article":
+                navigator.find_and_click_first_article()
+                # Get article content
+                content_to_summarize = navigator.get_page_text()
+            elif action["type"] == "fill_form":
+                # This would need form data from the prompt
+                pass
+        
+        # Get all steps and screenshots
+        steps = navigator.get_steps()
+        screenshots = navigator.get_screenshots()
+    
+    # Summarize content if needed
+    summary = ""
+    needs_summary = any(a["type"] == "summarize" for a in task_details.get("actions", []))
+    
+    if needs_summary and content_to_summarize:
+        print("Generating summary...")
+        if model_id and LANGCHAIN_AVAILABLE:
+            # Use LangChain for better summarization
+            summary = summarize_with_langchain(content_to_summarize, model_id, hf_token)
+        else:
+            # Fallback to simple inference
+            chunks = chunk_text(content_to_summarize, max_chars=6000)
+            if chunks:
+                summary_prompt = f"Summarize the following article:\n\n{chunks[0]}"
+                if model_id:
+                    summary = run_inference_transformers(model_id, summary_prompt, hf_token)
+                else:
+                    summary = "Summary generation not available for this model."
+    
+    # Generate PDF report
+    print("Generating PDF report...")
+    pdf_filename = "navigation_report.pdf"
+    try:
+        create_navigation_report(
+            steps=steps,
+            screenshots=screenshots,
+            summary=summary,
+            original_prompt=query,
+            output_file=pdf_filename
+        )
+        print(f"PDF report created: {pdf_filename}")
+    except Exception as e:
+        print(f"Error creating PDF: {e}")
+    
+    # Create response
+    response_parts = []
+    response_parts.append("Web Navigation Task Completed")
+    response_parts.append(f"\nSteps executed: {len(steps)}")
+    response_parts.append(f"Screenshots captured: {len(screenshots)}")
+    
+    if summary:
+        response_parts.append(f"\n\nSummary:\n{summary}")
+    
+    response_parts.append(f"\n\nDetailed report saved to: {pdf_filename}")
+    
+    return "\n".join(response_parts)
+
 def main():
     parser = argparse.ArgumentParser(description="Run Gemma 3 270M Inference")
     parser.add_argument("--model", required=True, help="Model key (gemma-3-270m or gemma-3-270m-it)")
@@ -146,12 +357,20 @@ def main():
 
     backend = MODEL_MAPPINGS[args.model].get("backend", "llama-cpp")
     
-    model_path_or_id = download_model(args.model, args.hf_token)
+    # Check if this is a web navigation task
+    is_navigation, _ = parse_navigation_prompt(args.query) if WEB_NAVIGATION_AVAILABLE else (False, None)
     
-    if backend == "transformers":
-        response = run_inference_transformers(model_path_or_id, args.query, args.hf_token)
+    if is_navigation:
+        # Handle web navigation with Playwright
+        response = handle_web_navigation(args.query, args.model, args.hf_token)
     else:
-        response = run_inference_llama(model_path_or_id, args.query)
+        # Regular inference
+        model_path_or_id = download_model(args.model, args.hf_token)
+        
+        if backend == "transformers":
+            response = run_inference_transformers(model_path_or_id, args.query, args.hf_token)
+        else:
+            response = run_inference_llama(model_path_or_id, args.query)
     
     print("\n--- RESPONSE ---")
     print(response)
