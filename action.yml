@@ -42,12 +42,12 @@ runs:
           gemma-3-weights-
 
     - name: Install HF CLI
-      if: inputs.model == 'gemma-3-270m-it'
+      if: inputs.model == 'gemma-3-270m-it' || inputs.model == 'gemma-3-270m-instruct'
       shell: bash
       run: uv tool install huggingface_hub
 
     - name: Download Model (CLI)
-      if: inputs.model == 'gemma-3-270m-it'
+      if: inputs.model == 'gemma-3-270m-it' || inputs.model == 'gemma-3-270m-instruct'
       shell: bash
       env:
         HF_TOKEN: ${{ inputs.hf_token }}

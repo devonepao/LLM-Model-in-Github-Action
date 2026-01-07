@@ -22,6 +22,10 @@ MODEL_MAPPINGS = {
     "gemma-3-270m-it": {
         "repo_id": "google/gemma-3-270m-it",
         "backend": "transformers"
+    },
+    "gemma-3-270m-instruct": {
+        "repo_id": "google/gemma-3-270m-it",
+        "backend": "transformers"
     }
 }
 
@@ -98,7 +102,8 @@ def run_inference_transformers(model_id, query, hf_token=None):
         model = AutoModelForCausalLM.from_pretrained(
             model_id, 
             token=hf_token,
-            torch_dtype=torch.float32  # explicit float32 for CPU safety
+            torch_dtype=torch.float32,  # explicit float32 for CPU safety
+            use_safetensors=True
         )
         
         # Gemma 270M is small, we can run on CPU
