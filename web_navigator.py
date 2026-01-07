@@ -308,13 +308,47 @@ def chunk_text(text: str, max_chars: int = 8000) -> List[str]:
     Split text into chunks that fit within the context window.
     Leaves room for prompt and response tokens.
     """
+    # If text is short enough, return as-is
+    if len(text) <= max_chars:
+        return [text]
+    
     # Split by paragraphs first
     paragraphs = text.split("\n\n")
     chunks = []
     current_chunk = ""
     
     for para in paragraphs:
-        if len(current_chunk) + len(para) + 2 <= max_chars:
+        # If a single paragraph is too long, split it further
+        if len(para) > max_chars:
+            # If current chunk has content, save it
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+                current_chunk = ""
+            
+            # Split long paragraph by sentences
+            sentences = para.split(". ")
+            for sentence in sentences:
+                # If a single sentence is still too long, split by words
+                if len(sentence) > max_chars:
+                    if current_chunk:
+                        chunks.append(current_chunk.strip())
+                        current_chunk = ""
+                    
+                    words = sentence.split()
+                    for word in words:
+                        if len(current_chunk) + len(word) + 1 <= max_chars:
+                            current_chunk += word + " "
+                        else:
+                            if current_chunk:
+                                chunks.append(current_chunk.strip())
+                            current_chunk = word + " "
+                elif len(current_chunk) + len(sentence) + 2 <= max_chars:
+                    current_chunk += sentence + ". "
+                else:
+                    if current_chunk:
+                        chunks.append(current_chunk.strip())
+                    current_chunk = sentence + ". "
+        elif len(current_chunk) + len(para) + 2 <= max_chars:
             current_chunk += para + "\n\n"
         else:
             if current_chunk:
@@ -324,22 +358,4 @@ def chunk_text(text: str, max_chars: int = 8000) -> List[str]:
     if current_chunk:
         chunks.append(current_chunk.strip())
     
-    # If a single paragraph is too long, split by sentences
-    final_chunks = []
-    for chunk in chunks:
-        if len(chunk) <= max_chars:
-            final_chunks.append(chunk)
-        else:
-            sentences = chunk.split(". ")
-            current = ""
-            for sentence in sentences:
-                if len(current) + len(sentence) + 2 <= max_chars:
-                    current += sentence + ". "
-                else:
-                    if current:
-                        final_chunks.append(current.strip())
-                    current = sentence + ". "
-            if current:
-                final_chunks.append(current.strip())
-    
-    return final_chunks
+    return chunks if chunks else [text[:max_chars]]
