@@ -12,7 +12,7 @@ on:
         - gemma-3-270m
         - gemma-3-270m-instruct
       query:
-        description: 'Enter your query'
+        description: 'Enter your query (use "navigate to [URL]" for web navigation)'
         required: true
         default: 'Explain why the sky is blue.'
         type: string

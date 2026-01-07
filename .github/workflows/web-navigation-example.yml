@@ -1,0 +1,79 @@
+name: Web Navigation Example
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Website URL to navigate'
+        required: true
+        default: 'https://example.com'
+        type: string
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'open first article and summarize'
+        type: choice
+        options:
+        - open first article and summarize
+        - extract main content
+        - just navigate and screenshot
+
+jobs:
+  web-navigation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build Navigation Query
+        id: build-query
+        run: |
+          URL="${{ inputs.url }}"
+          ACTION="${{ inputs.action }}"
+          QUERY="navigate to ${URL} ${ACTION}"
+          echo "query=${QUERY}" >> $GITHUB_OUTPUT
+          echo "Navigation query: ${QUERY}"
+
+      - name: Run Web Navigation with Gemma
+        uses: ./
+        with:
+          model: 'gemma-3-270m-instruct'
+          query: ${{ steps.build-query.outputs.query }}
+          hf_token: ${{ secrets.HF_TOKEN }}
+
+      - name: Display Results
+        run: |
+          echo "=== Navigation Results ==="
+          cat response.txt
+          echo ""
+          if [ -f navigation_report.pdf ]; then
+            echo "✓ PDF report generated successfully"
+            ls -lh navigation_report.pdf
+          fi
+
+      - name: Upload Text Response
+        uses: actions/upload-artifact@v4
+        with:
+          name: navigation-response
+          path: response.txt
+
+      - name: Upload PDF Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: navigation-report-pdf
+          path: navigation_report.pdf
+          if-no-files-found: warn
+
+      - name: Comment Summary
+        run: |
+          echo "### Web Navigation Completed ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** ${{ inputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Action:** ${{ inputs.action }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Model:** gemma-3-270m-instruct" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f navigation_report.pdf ]; then
+            echo "📄 PDF report available in artifacts" >> $GITHUB_STEP_SUMMARY
+          fi
