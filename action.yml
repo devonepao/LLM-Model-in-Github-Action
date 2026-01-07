@@ -37,9 +37,23 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ github.workspace }}/hf_cache
-        key: gemma-3-270m-weights-${{ inputs.model }}
+        key: gemma-3-weights-${{ inputs.model }}
         restore-keys: |
-          gemma-3-270m-weights-
+          gemma-3-weights-
+
+    - name: Install HF CLI
+      if: inputs.model == 'gemma-3-270m-it'
+      shell: bash
+      run: uv tool install huggingface_hub
+
+    - name: Download Model (CLI)
+      if: inputs.model == 'gemma-3-270m-it'
+      shell: bash
+      env:
+        HF_TOKEN: ${{ inputs.hf_token }}
+        HF_HOME: ${{ github.workspace }}/hf_cache
+      run: |
+        hf download google/gemma-3-270m-it --cache-dir $HF_HOME
 
     - name: Run Inference (with uv)
       id: inference
