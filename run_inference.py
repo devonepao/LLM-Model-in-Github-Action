@@ -24,6 +24,7 @@ def download_model(model_key, hf_token=None):
     """Downloads the model from Hugging Face Hub if not cached."""
     # Prioritize environment variable if passed token is empty
     hf_token = hf_token or os.getenv("HF_TOKEN")
+    cache_dir = os.getenv("HF_HOME")
     
     if model_key not in MODEL_MAPPINGS:
         print(f"Error: Unknown model '{model_key}'. Available: {list(MODEL_MAPPINGS.keys())}")
@@ -36,7 +37,8 @@ def download_model(model_key, hf_token=None):
         model_path = hf_hub_download(
             repo_id=config['repo_id'],
             filename=config['filename'],
-            token=hf_token
+            token=hf_token,
+            cache_dir=cache_dir
         )
         print(f"Model downloaded to: {model_path}")
         return model_path

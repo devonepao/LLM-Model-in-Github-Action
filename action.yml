@@ -46,6 +46,7 @@ runs:
       shell: bash
       env:
         HF_TOKEN: ${{ inputs.hf_token }}
+        HF_HOME: ${{ github.workspace }}/hf_cache
       run: |
         uv run --with-requirements requirements.txt ${{ github.action_path }}/run_inference.py \
           --model "${{ inputs.model }}" \
