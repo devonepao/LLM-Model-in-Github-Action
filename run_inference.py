@@ -169,12 +169,14 @@ def run_inference_transformers(model_id, query, hf_token=None):
 
 # Define GemmaLangChainLLM only when LangChain is available
 if LANGCHAIN_AVAILABLE:
+    from typing import ClassVar 
+    
     class GemmaLangChainLLM(LLM):
         """Custom LangChain LLM wrapper for Gemma model."""
         
         # Model configuration constants
-        MAX_INPUT_TOKENS = 6000  # Leave room for output within 32K context
-        MAX_OUTPUT_TOKENS = 512
+        MAX_INPUT_TOKENS: ClassVar[int] = 6000  # Leave room for output within 32K context
+        MAX_OUTPUT_TOKENS: ClassVar[int] = 512
         
         model_id: str
         tokenizer: Any = None
