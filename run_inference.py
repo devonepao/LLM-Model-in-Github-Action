@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from typing import Optional, List, Any
 from huggingface_hub import hf_hub_download
 from llama_cpp import Llama
 
@@ -27,7 +28,6 @@ try:
     from langchain.chains.summarize import load_summarize_chain
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     from langchain.docstore.document import Document
-    from typing import Optional, List, Any
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     print("Warning: LangChain not available")
@@ -154,68 +154,70 @@ def run_inference_transformers(model_id, query, hf_token=None):
         sys.exit(1)
 
 
-class GemmaLangChainLLM(LLM):
-    """Custom LangChain LLM wrapper for Gemma model."""
-    
-    # Model configuration constants
-    MAX_INPUT_TOKENS = 6000  # Leave room for output within 32K context
-    MAX_OUTPUT_TOKENS = 512
-    
-    model_id: str
-    tokenizer: Any = None
-    model: Any = None
-    hf_token: Optional[str] = None
-    
-    def __init__(self, model_id: str, hf_token: Optional[str] = None, max_input_tokens: int = None):
-        super().__init__()
-        self.model_id = model_id
-        self.hf_token = hf_token or os.getenv("HF_TOKEN")
-        if max_input_tokens is not None:
-            self.MAX_INPUT_TOKENS = max_input_tokens
-        self._load_model()
-    
-    def _load_model(self):
-        """Load the model and tokenizer."""
-        if not TRANSFORMERS_AVAILABLE:
-            raise ImportError("Transformers library not available")
+# Define GemmaLangChainLLM only when LangChain is available
+if LANGCHAIN_AVAILABLE:
+    class GemmaLangChainLLM(LLM):
+        """Custom LangChain LLM wrapper for Gemma model."""
         
-        print(f"Loading model for LangChain: {self.model_id}...")
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, token=self.hf_token)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.model_id,
-            token=self.hf_token,
-            torch_dtype=torch.float32,
-            use_safetensors=True
-        )
-        self.model.to("cpu")
-    
-    @property
-    def _llm_type(self) -> str:
-        return "gemma"
-    
-    def _call(self, prompt: str, stop: Optional[List[str]] = None) -> str:
-        """Run inference on the prompt."""
-        inputs = self.tokenizer(prompt, return_tensors="pt").to("cpu")
+        # Model configuration constants
+        MAX_INPUT_TOKENS = 6000  # Leave room for output within 32K context
+        MAX_OUTPUT_TOKENS = 512
         
-        # Limit input to avoid context overflow
-        if inputs.input_ids.shape[1] > self.MAX_INPUT_TOKENS:
-            inputs.input_ids = inputs.input_ids[:, -self.MAX_INPUT_TOKENS:]
-            inputs.attention_mask = inputs.attention_mask[:, -self.MAX_INPUT_TOKENS:]
+        model_id: str
+        tokenizer: Any = None
+        model: Any = None
+        hf_token: Optional[str] = None
         
-        outputs = self.model.generate(
-            **inputs,
-            max_new_tokens=self.MAX_OUTPUT_TOKENS,
-            do_sample=True,
-            temperature=0.7,
-            top_p=0.95,
-            top_k=64,
-        )
+        def __init__(self, model_id: str, hf_token: Optional[str] = None, max_input_tokens: int = None):
+            super().__init__()
+            self.model_id = model_id
+            self.hf_token = hf_token or os.getenv("HF_TOKEN")
+            if max_input_tokens is not None:
+                self.MAX_INPUT_TOKENS = max_input_tokens
+            self._load_model()
         
-        response = self.tokenizer.decode(
-            outputs[0][inputs.input_ids.shape[1]:],
-            skip_special_tokens=True
-        )
-        return response.strip()
+        def _load_model(self):
+            """Load the model and tokenizer."""
+            if not TRANSFORMERS_AVAILABLE:
+                raise ImportError("Transformers library not available")
+            
+            print(f"Loading model for LangChain: {self.model_id}...")
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, token=self.hf_token)
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_id,
+                token=self.hf_token,
+                torch_dtype=torch.float32,
+                use_safetensors=True
+            )
+            self.model.to("cpu")
+        
+        @property
+        def _llm_type(self) -> str:
+            return "gemma"
+        
+        def _call(self, prompt: str, stop: Optional[List[str]] = None) -> str:
+            """Run inference on the prompt."""
+            inputs = self.tokenizer(prompt, return_tensors="pt").to("cpu")
+            
+            # Limit input to avoid context overflow
+            if inputs.input_ids.shape[1] > self.MAX_INPUT_TOKENS:
+                inputs.input_ids = inputs.input_ids[:, -self.MAX_INPUT_TOKENS:]
+                inputs.attention_mask = inputs.attention_mask[:, -self.MAX_INPUT_TOKENS:]
+            
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=self.MAX_OUTPUT_TOKENS,
+                do_sample=True,
+                temperature=0.7,
+                top_p=0.95,
+                top_k=64,
+            )
+            
+            response = self.tokenizer.decode(
+                outputs[0][inputs.input_ids.shape[1]:],
+                skip_special_tokens=True
+            )
+            return response.strip()
 
 
 def summarize_with_langchain(text: str, model_id: str, hf_token: Optional[str] = None) -> str:
