@@ -24,13 +24,25 @@ except ImportError as e:
 
 # LangChain imports
 try:
-    from langchain.llms.base import LLM
-    from langchain.chains.summarize import load_summarize_chain
-    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    try:
+        from langchain_core.language_models import LLM
+    except ImportError:
+        from langchain.llms.base import LLM
+        
+    try:
+        from langchain.chains.summarize import load_summarize_chain
+    except ImportError:
+        from langchain.chains import load_summarize_chain
+        
+    try:
+        from langchain.text_splitter import RecursiveCharacterTextSplitter
+    except ImportError:
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+        
     from langchain.docstore.document import Document
     LANGCHAIN_AVAILABLE = True
-except ImportError:
-    print("Warning: LangChain not available")
+except ImportError as e:
+    print(f"Warning: LangChain not available: {e}")
     LANGCHAIN_AVAILABLE = False
 
 # Model Mapping

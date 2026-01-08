@@ -261,6 +261,115 @@ class WebNavigator:
             self.steps.append(step)
             return step
     
+    def mark_interactive_elements(self) -> Dict[str, Dict]:
+        """
+        Inject unique data attributes into interactive elements to allow easy referencing by LLM.
+        Returns a dictionary mapping ID to element details.
+        """
+        script = """
+        () => {
+            const elements = document.querySelectorAll('a, button, input, textarea, select, [onclick], [role="button"], [role="link"]');
+            const map = {};
+            let counter = 1;
+            
+            elements.forEach(el => {
+                // Skip invisible or tiny elements
+                const rect = el.getBoundingClientRect();
+                if (rect.width < 5 || rect.height < 5 || window.getComputedStyle(el).visibility === 'hidden') return;
+                
+                // Assign ID if not key
+                let id = el.getAttribute('data-llm-id');
+                if (!id) {
+                    id = counter.toString();
+                    el.setAttribute('data-llm-id', id);
+                    counter++;
+                }
+                
+                let label = el.innerText || el.placeholder || el.value || el.name || el.getAttribute('aria-label') || "";
+                label = label.slice(0, 100).replace(/\\s+/g, ' ').trim();
+                
+                if (!label && el.tagName === 'INPUT') label = el.type;
+                
+                map[id] = {
+                    "tag": el.tagName.toLowerCase(),
+                    "type": el.type || null,
+                    "label": label,
+                    "id": id
+                };
+            });
+            return map;
+        }
+        """
+        try:
+            element_map = self.page.evaluate(script)
+            return element_map
+        except Exception as e:
+            print(f"Error marking elements: {e}")
+            return {}
+
+    def get_interactive_elements(self) -> str:
+        """
+        Get a simplified text representation of interactive elements for the LLM.
+        """
+        elements = self.mark_interactive_elements()
+        if not elements:
+            return "No interactive elements found."
+            
+        lines = []
+        for id, details in elements.items():
+            tag = details['tag']
+            label = details['label']
+            t = details['type']
+            
+            desc = f"[{id}] <{tag}"
+            if t:
+                desc += f" type='{t}'"
+            desc += f"> {label}"
+            lines.append(desc)
+            
+        return "\n".join(lines[:200]) # Limit to avoid context overflow
+
+    def execute_action(self, action_id: str, action_type: str, value: str = None) -> Dict:
+        """
+        Execute an action on an element identified by its marked ID.
+        """
+        print(f"Executing {action_type} on element {action_id} (Value: {value})")
+        
+        try:
+            selector = f"[data-llm-id='{action_id}']"
+            element = self.page.query_selector(selector)
+            
+            if not element:
+                return {"success": False, "error": f"Element {action_id} not found"}
+                
+            if action_type == "click":
+                element.click()
+                self.page.wait_for_load_state("domcontentloaded", timeout=10000)
+            elif action_type == "type" or action_type == "fill":
+                if value is None:
+                    return {"success": False, "error": "Value required for type/fill"}
+                element.fill(value)
+            else:
+                 return {"success": False, "error": f"Unknown action {action_type}"}
+                 
+            step = {
+                 "action": action_type,
+                 "element_id": action_id,
+                 "value": value,
+                 "timestamp": datetime.now().isoformat(),
+                 "success": True
+            }
+            self.steps.append(step)
+            
+            # Screenshot
+            screenshot_bytes = self.page.screenshot(full_page=True)
+            self.screenshots.append(screenshot_bytes)
+            
+            return step
+            
+        except Exception as e:
+             return {"success": False, "error": str(e)}
+
     def get_steps(self) -> List[Dict]:
         """Return all recorded steps."""
         return self.steps
