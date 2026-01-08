@@ -1,0 +1,39 @@
+name: Web Navigator Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      website_url:
+        description: 'Website URL to navigate'
+        required: true
+        default: 'https://example.com'
+      user_instruction:
+        description: 'Instruction for the agent'
+        required: true
+        default: 'Summarize the page'
+      model:
+        description: 'Model variant'
+        required: true
+        default: 'gemma-3-270m-it'
+
+jobs:
+  navigate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Run Web Navigator Action
+        uses: ./web-navigator-action
+        with:
+          website_url: ${{ inputs.website_url }}
+          user_instruction: ${{ inputs.user_instruction }}
+          model: ${{ inputs.model }}
+          hf_token: ${{ secrets.HF_TOKEN }}
+      
+      - name: Upload Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: navigation-report
+          path: agent_report.pdf
+          if-no-files-found: warn
