@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from typing import Optional, List, Any
 from huggingface_hub import hf_hub_download
 from llama_cpp import Llama
 
@@ -21,22 +22,16 @@ except ImportError as e:
     print(f"Warning: Web navigation not available: {e}")
     WEB_NAVIGATION_AVAILABLE = False
 
-# LangChain imports and class definition
+# LangChain imports
 try:
     from langchain.llms.base import LLM
     from langchain.chains.summarize import load_summarize_chain
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     from langchain.docstore.document import Document
-    from typing import Optional, List, Any
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     print("Warning: LangChain not available")
     LANGCHAIN_AVAILABLE = False
-    # Define placeholder types when LangChain is not available
-    try:
-        from typing import Optional, List, Any
-    except ImportError:
-        pass
 
 # Model Mapping
 MODEL_MAPPINGS = {
