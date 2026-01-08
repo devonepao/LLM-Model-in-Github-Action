@@ -127,7 +127,8 @@ def run_inference_transformers(model_id, query, hf_token=None):
             use_safetensors=True
         )
         
-        # Gemma 270M is small, we can run on CPU
+        # Force CPU-only execution to match CPU-only PyTorch installation
+        # This keeps download size minimal (~200MB vs 2GB+ for CUDA version)
         device = "cpu"
         model.to(device)
 
@@ -186,9 +187,10 @@ if LANGCHAIN_AVAILABLE:
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_id,
                 token=self.hf_token,
-                torch_dtype=torch.float32,
+                torch_dtype=torch.float32,  # explicit float32 for CPU safety
                 use_safetensors=True
             )
+            # Force CPU-only execution to match CPU-only PyTorch installation
             self.model.to("cpu")
         
         @property
