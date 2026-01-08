@@ -30,7 +30,10 @@ runs:
     - name: Install Dependencies
       shell: bash
       run: |
+        uv venv
         uv pip install -r ${{ github.action_path }}/../requirements.txt
+        # Install playwright browsers
+        # Note: uv run automatically detects and uses the .venv in the current directory
         uv run python -m playwright install chromium
         uv run python -m playwright install-deps chromium
 
